@@ -16,3 +16,8 @@ node_modules/
 __pycache__/
 .venv/
 venv/
+
+# Go 构建与仿真产物
+/bin/
+/out/
+*.test

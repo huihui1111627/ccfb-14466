@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EONSA 弹性光网络 RSA 仿真平台</title>
+<style>
+  :root {
+    --bg: #0f141b; --panel: #171e28; --panel2: #1e2733; --line: #2a3543;
+    --text: #d8e0ea; --muted: #8595a7; --accent: #4ea1ff; --ok: #59a14f;
+    --warn: #edc948; --bad: #e15759; --guard: #3a4452;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:13px/1.5 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; }
+  header { padding:10px 18px; background:var(--panel); border-bottom:1px solid var(--line);
+    display:flex; align-items:center; gap:16px; }
+  header h1 { font-size:16px; margin:0; }
+  header .sub { color:var(--muted); font-size:12px; }
+  .tabs { display:flex; gap:4px; margin-left:auto; }
+  .tabs button { background:transparent; color:var(--muted); border:1px solid transparent;
+    padding:6px 14px; border-radius:6px; cursor:pointer; font-size:13px; }
+  .tabs button.active { background:var(--panel2); color:var(--text); border-color:var(--line); }
+  main { padding:14px 18px; }
+  .view { display:none; } .view.active { display:block; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:14px; margin-bottom:14px; }
+  .card h2 { font-size:14px; margin:0 0 10px; color:var(--accent); }
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  select,input,button.action { background:var(--panel2); color:var(--text);
+    border:1px solid var(--line); border-radius:6px; padding:6px 10px; font-size:13px; }
+  button.action { cursor:pointer; }
+  button.action.primary { background:var(--accent); color:#08121f; border-color:var(--accent); font-weight:600; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th,td { padding:6px 8px; border-bottom:1px solid var(--line); text-align:right; }
+  th:first-child,td:first-child { text-align:left; }
+  th { color:var(--muted); font-weight:500; }
+  .muted { color:var(--muted); }
+  .pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:11px; }
+  .pill.ok { background:rgba(89,161,79,.18); color:var(--ok); }
+  .pill.bad { background:rgba(225,87,89,.18); color:var(--bad); }
+  /* 拓扑 */
+  #topoWrap { position:relative; }
+  #topo { width:100%; height:520px; background:var(--bg); border-radius:8px; }
+  .node-label { fill:var(--muted); font-size:10px; pointer-events:none; }
+  .link-line { stroke:#3b4a5e; stroke-width:2; cursor:pointer; }
+  .link-line.hot { stroke:var(--warn); stroke-width:3.5; }
+  .link-line.blocked { stroke:var(--bad); stroke-width:3.5; }
+  .node-circle { fill:var(--panel2); stroke:var(--accent); stroke-width:1.5; cursor:pointer; }
+  .node-circle.selected { fill:var(--accent); }
+  /* 频谱条 */
+  .spec-row { display:flex; align-items:center; gap:8px; margin-bottom:5px; }
+  .spec-name { width:110px; color:var(--muted); font-size:11px; flex:none; cursor:pointer; }
+  .spec-name.hot { color:var(--warn); }
+  .spec-bar { position:relative; flex:1; height:22px; background:#0b0f14;
+    border:1px solid var(--line); border-radius:4px; overflow:hidden; display:flex; }
+  .slot { flex:1 1 0; min-width:0; border-right:1px solid rgba(255,255,255,.04); }
+  .slot.used { cursor:pointer; }
+  .slot.guard { background:var(--guard); }
+  .legend { display:flex; gap:14px; font-size:11px; color:var(--muted); margin-top:8px; }
+  .legend i { display:inline-block; width:12px; height:12px; border-radius:2px;
+    margin-right:4px; vertical-align:-1px; }
+  /* 曲线 */
+  canvas.chart { width:100%; height:280px; }
+  .chart-box { position:relative; }
+  /* 动画 */
+  .anim-controls { display:flex; gap:10px; align-items:center; margin-bottom:10px; }
+  .anim-step { color:var(--warn); font-weight:600; }
+  #connTip { position:absolute; pointer-events:none; background:var(--panel2);
+    border:1px solid var(--line); border-radius:6px; padding:6px 9px; font-size:11px;
+    display:none; z-index:10; max-width:240px; }
+  .metric { font-size:24px; font-weight:600; }
+  .metric.bad { color:var(--bad); } .metric.ok { color:var(--ok); } .metric.warn { color:var(--warn); }
+  .kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  .kpi { background:var(--panel2); border-radius:8px; padding:12px; }
+  .kpi .label { color:var(--muted); font-size:11px; margin-bottom:4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>EONSA 弹性光网络 RSA 仿真平台</h1>
+  <span class="sub">路由与频谱分配 · 碎片指标 · 不中断整理 · 扩容诊断</span>
+  <div class="tabs">
+    <button class="active" data-view="network">网络与频谱</button>
+    <button data-view="scenarios">场景对比</button>
+    <button data-view="defrag">碎片整理</button>
+    <button data-view="bottleneck">瓶颈诊断</button>
+  </div>
+</header>
+<main>
+  <!-- 视图1：网络与频谱 -->
+  <section class="view active" id="view-network">
+    <div class="grid2">
+      <div class="card">
+        <h2>干线拓扑（点击节点选为源/宿，点击链路高亮频谱）</h2>
+        <div id="topoWrap">
+          <svg id="topo"></svg>
+          <div id="connTip"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>业务申请（交互式 RSA）</h2>
+        <div class="row" style="margin-bottom:10px">
+          <label>源节点 <select id="srcSel"></select></label>
+          <label>宿节点 <select id="dstSel"></select></label>
+          <label>速率
+            <select id="rateSel"><option>100</option><option>200</option><option selected>400</option><option>800</option></select> Gbps
+          </label>
+          <label>策略
+            <select id="polSel"><option value="0">首次适配</option><option value="1">最后适配</option><option value="2">碎片影响最小</option></select>
+          </label>
+          <button class="action primary" id="btnRequest">开通</button>
+          <button class="action" id="btnReset">重置网络</button>
+        </div>
+        <div id="reqResult" class="muted"></div>
+        <h2 style="margin-top:16px">在线连接（点击拆除）</h2>
+        <div style="max-height:300px;overflow:auto"><table id="connTable"><thead>
+          <tr><th>ID</th><th>源-宿</th><th>速率</th><th>中继</th><th>频隙</th><th></th></tr>
+        </thead><tbody></tbody></table></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>各光纤频谱占用条 <span class="muted">（彩色=连接数据频隙，灰=保护带，黑=空闲；悬停看连接）</span></h2>
+      <div id="spectrum"></div>
+      <div class="legend">
+        <span><i style="background:var(--ok)"></i>数据频隙</span>
+        <span><i style="background:var(--guard)"></i>保护带</span>
+        <span><i style="background:#0b0f14;border:1px solid var(--line)"></i>空闲</span>
+        <span id="fragLegend"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 视图2：场景对比 -->
+  <section class="view" id="view-scenarios">
+    <div class="card">
+      <h2>6 组场景汇总（3 种放置策略 × 是否碎片整理，同一条业务事件流）</h2>
+      <table id="sumTable"><thead><tr>
+        <th>场景</th><th>请求数</th><th>阻塞数</th><th>阻塞率</th><th>终态利用率</th>
+        <th>终态碎片率</th><th>终态熵</th><th>中继数</th><th>整理次数</th><th>整理耗时(s)</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+    <div class="grid2">
+      <div class="card"><h2>阻塞率随时间变化</h2><div class="chart-box"><canvas class="chart" id="chBlocking"></canvas></div></div>
+      <div class="card"><h2>频谱利用率</h2><div class="chart-box"><canvas class="chart" id="chUtil"></canvas></div></div>
+      <div class="card"><h2>外部碎片率（1 − 最大空闲块/总空闲）</h2><div class="chart-box"><canvas class="chart" id="chFrag"></canvas></div></div>
+      <div class="card"><h2>在线电中继数量</h2><div class="chart-box"><canvas class="chart" id="chRegen"></canvas></div></div>
+    </div>
+  </section>
+
+  <!-- 视图3：碎片整理 -->
+  <section class="view" id="view-defrag">
+    <div class="card">
+      <h2>推挽式不中断碎片整理（只向左逐 slot 推、不跳过其他连接）</h2>
+      <div class="kpi-grid" style="margin-bottom:12px">
+        <div class="kpi"><div class="label">整理前平均碎片率</div><div class="metric warn" id="efBefore">-</div></div>
+        <div class="kpi"><div class="label">整理后平均碎片率</div><div class="metric ok" id="efAfter">-</div></div>
+        <div class="kpi"><div class="label">挪动次数</div><div class="metric" id="moveCount">-</div></div>
+        <div class="kpi"><div class="label">预计总耗时</div><div class="metric" id="moveTime">-</div></div>
+      </div>
+      <div class="anim-controls">
+        <button class="action primary" id="btnPlay">播放挪动过程</button>
+        <button class="action" id="btnPrev">上一步</button>
+        <button class="action" id="btnNext">下一步</button>
+        <label>速度 <input type="range" id="speed" min="120" max="2000" value="700"></label>
+        <span class="anim-step" id="animStep"></span>
+      </div>
+      <div id="animSpectrum"></div>
+    </div>
+    <div class="card">
+      <h2>挪动顺序明细</h2>
+      <div style="max-height:300px;overflow:auto"><table id="moveTable"><thead><tr>
+        <th>#</th><th>连接</th><th>中继段</th><th>链路</th><th>从 slot</th><th>到 slot</th><th>频隙数</th><th>耗时(s)</th>
+      </tr></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- 视图4：瓶颈诊断 -->
+  <section class="view" id="view-bottleneck">
+    <div class="card">
+      <h2>阻塞瓶颈链路与扩容收益（在网络副本上扩容 32 频隙后反事实重放阻塞请求）</h2>
+      <table id="bnTable"><thead><tr>
+        <th>排名</th><th>链路</th><th>命中次数</th><th>当前碎片率</th><th>扩容后可挽回请求</th><th>综合收益分</th>
+      </tr></thead><tbody></tbody></table>
+      <p class="muted">说明：命中次数 = 该链路作为最紧张链路出现在失败尝试中的次数；可挽回请求数是扩容收益的直接度量，优先扩容该值最大的光纤段。</p>
+    </div>
+  </section>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const api = async (p, opt) => (await fetch(p, opt)).json();
+let TOPO = null, SPECTRUM = null, CONNS = null;
+let hotLink = null, selSide = 'src';
+
+// ---------- 标签页 ----------
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  $('#view-' + b.dataset.view).classList.add('active');
+  if (b.dataset.view === 'scenarios') loadScenarios();
+  if (b.dataset.view === 'defrag') loadDefrag();
+  if (b.dataset.view === 'bottleneck') loadBottleneck();
+});
+
+// ---------- 拓扑 ----------
+async function loadNetwork() {
+  TOPO = await api('/api/topo');
+  SPECTRUM = await api('/api/spectrum');
+  CONNS = await api('/api/connections');
+  drawTopo();
+  drawSpectrum('#spectrum', SPECTRUM);
+  drawConns();
+  fillNodeSelects();
+}
+function drawTopo() {
+  const svg = $('#topo'); svg.innerHTML = '';
+  const W = svg.clientWidth || 700, H = 520;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const xs = TOPO.nodes.map(n => n.x), ys = TOPO.nodes.map(n => n.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const px = x => 30 + (x - minX) / (maxX - minX || 1) * (W - 60);
+  const py = y => 30 + (y - minY) / (maxY - minY || 1) * (H - 60);
+  // 链路
+  for (const l of TOPO.links) {
+    const u = TOPO.nodes[l.u], v = TOPO.nodes[l.v];
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', px(u.x)); line.setAttribute('y1', py(u.y));
+    line.setAttribute('x2', px(v.x)); line.setAttribute('y2', py(v.y));
+    line.setAttribute('class', 'link-line');
+    line.dataset.id = l.id;
+    line.onclick = () => { hotLink = hotLink === l.id ? null : l.id; refreshLinkClass(); drawSpectrum('#spectrum', SPECTRUM); };
+    svg.appendChild(line);
+  }
+  // 节点
+  for (const n of TOPO.nodes) {
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('cx', px(n.x)); c.setAttribute('cy', py(n.y)); c.setAttribute('r', 9);
+    c.setAttribute('class', 'node-circle'); c.dataset.id = n.id;
+    c.onclick = () => {
+      if (selSide === 'src') { $('#srcSel').value = n.id; selSide = 'dst'; }
+      else { $('#dstSel').value = n.id; selSide = 'src'; }
+    };
+    svg.appendChild(c);
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    t.setAttribute('x', px(n.x) + 12); t.setAttribute('y', py(n.y) + 4);
+    t.setAttribute('class', 'node-label'); t.textContent = n.name;
+    svg.appendChild(t);
+  }
+}
+function refreshLinkClass() {
+  document.querySelectorAll('.link-line').forEach(el => {
+    el.classList.toggle('hot', Number(el.dataset.id) === hotLink);
+  });
+}
+function fillNodeSelects() {
+  for (const id of ['srcSel', 'dstSel']) {
+    const sel = $('#' + id); sel.innerHTML = '';
+    TOPO.nodes.forEach((n, i) => {
+      const o = document.createElement('option');
+      o.value = n.id; o.textContent = n.name + (i === 0 ? '' : '');
+      sel.appendChild(o);
+    });
+  }
+  $('#dstSel').value = TOPO.nodes[Math.min(3, TOPO.nodes.length - 1)].id;
+}
+
+// ---------- 频谱条 ----------
+function drawSpectrum(sel, data) {
+  const root = $(sel); root.innerHTML = '';
+  for (const sp of data) {
+    const row = document.createElement('div'); row.className = 'spec-row';
+    const name = document.createElement('div');
+    name.className = 'spec-name' + (hotLink === sp.link.id ? ' hot' : '');
+    name.textContent = `L${sp.link.id} N${sp.link.u}-N${sp.link.v}`;
+    name.title = `长度 ${sp.link.lengthKm}km · 空闲 ${sp.link.free}/${sp.link.slots} · 最大块 ${sp.link.largestFree} · 碎片率 ${sp.link.externalFrag.toFixed(3)}`;
+    name.onclick = () => { hotLink = hotLink === sp.link.id ? null : sp.link.id; refreshLinkClass(); drawSpectrum(sel, data); };
+    const bar = document.createElement('div'); bar.className = 'spec-bar';
+    sp.grid.forEach((g, idx) => {
+      const d = document.createElement('div');
+      d.className = 'slot' + (g === 1 ? ' used' : g === 2 ? ' guard' : '');
+      if (g === 1) {
+        const iv = sp.intervals.find(x => idx >= x.start && idx < x.end);
+        if (iv) {
+          d.style.background = iv.color;
+          d.onmouseenter = e => showTip(e, iv);
+          d.onmouseleave = hideTip;
+        }
+      }
+      bar.appendChild(d);
+    });
+    row.append(name, bar); root.appendChild(row);
+  }
+}
+function showTip(e, iv) {
+  const tip = $('#connTip');
+  tip.style.display = 'block';
+  tip.innerHTML = `<b>${iv.connId}</b><br>中继段 #${iv.segId}<br>频隙 [${iv.start},${iv.end})<br>调制 ${iv.mod} · ${iv.rateGbps} Gbps`;
+  tip.style.left = (e.pageX + 12) + 'px'; tip.style.top = (e.pageY + 12) + 'px';
+}
+function hideTip() { $('#connTip').style.display = 'none'; }
+
+// ---------- 连接表与交互 ----------
+function drawConns() {
+  const tb = $('#connTable tbody'); tb.innerHTML = '';
+  for (const c of CONNS) {
+    const tr = document.createElement('tr');
+    const slotDesc = c.segments.map(s => `[${s.start},+${s.slots})@L${s.links[0]}`).join(' | ');
+    tr.innerHTML = `<td>${c.id}</td><td>N${c.src}-N${c.dst}</td><td>${c.rateGbps}G</td>
+      <td>${c.regens}</td><td style="text-align:left;font-size:11px">${slotDesc}</td><td></td>`;
+    const btn = document.createElement('button');
+    btn.className = 'action'; btn.textContent = '拆除';
+    btn.onclick = async () => {
+      await api('/api/request', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ release: true, connId: c.id }) });
+      await loadNetwork();
+    };
+    tr.lastElementChild.appendChild(btn);
+    tb.appendChild(tr);
+  }
+}
+$('#btnRequest').onclick = async () => {
+  const body = {
+    src: Number($('#srcSel').value), dst: Number($('#dstSel').value),
+    rateGbps: Number($('#rateSel').value), policy: Number($('#polSel').value),
+  };
+  const r = await api('/api/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const box = $('#reqResult');
+  if (r.success) {
+    box.innerHTML = `<span class="pill ok">开通成功</span> 连接 ${r.connId}，电中继 ${r.regens} 个`;
+    await loadNetwork();
+  } else {
+    box.innerHTML = `<span class="pill bad">阻塞</span> ${r.reason}；瓶颈链路：${(r.failLinks || []).map(x => 'L' + x).join(', ') || '无'}`;
+  }
+};
+$('#btnReset').onclick = async () => { await api('/api/reset'); await loadNetwork(); };
+
+// ---------- 场景曲线 ----------
+let SCEN = null;
+const SERIES_COLORS = ['#4ea1ff', '#e15759', '#59a14f', '#edc948', '#b07aa1', '#76b7b2'];
+async function loadScenarios() {
+  if (SCEN) return;
+  SCEN = await api('/api/scenarios');
+  // 汇总表
+  const tb = $('#sumTable tbody'); tb.innerHTML = '';
+  SCEN.forEach(s => {
+    const z = s.summary;
+    tb.innerHTML += `<tr><td>${s.name}</td><td>${z.arrivals}</td><td>${z.blocked}</td>
+      <td>${(z.blockingRate * 100).toFixed(2)}%</td><td>${(z.finalUtilization * 100).toFixed(2)}%</td>
+      <td>${z.finalExternalFrag.toFixed(4)}</td><td>${z.finalEntropy.toFixed(4)}</td>
+      <td>${z.finalRegenCount}</td><td>${z.defragRuns}</td><td>${z.defragDurationS.toFixed(0)}</td></tr>`;
+  });
+  drawChart('#chBlocking', s => s.blockingRate, v => (v * 100).toFixed(1) + '%');
+  drawChart('#chUtil', s => s.utilization, v => (v * 100).toFixed(1) + '%');
+  drawChart('#chFrag', s => s.externalFrag, v => v.toFixed(3));
+  drawChart('#chRegen', s => s.regenCount, v => v);
+}
+function drawChart(sel, pick, fmt) {
+  const cv = $(sel), dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, H = 280;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+  const pad = { l: 48, r: 12, t: 12, b: 28 };
+  const months = SCEN[0].stats.length;
+  let max = 0;
+  for (const s of SCEN) for (const st of s.stats) max = Math.max(max, pick(st));
+  max = max || 1;
+  const X = i => pad.l + i / (months - 1) * (W - pad.l - pad.r);
+  const Y = v => H - pad.b - v / max * (H - pad.t - pad.b);
+  // 网格与坐标
+  ctx.strokeStyle = '#2a3543'; ctx.fillStyle = '#8595a7'; ctx.font = '10px sans-serif';
+  for (let g = 0; g <= 4; g++) {
+    const v = max * g / 4, y = Y(v);
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+    ctx.fillText(fmt(v), 4, y + 3);
+  }
+  for (let m = 0; m < months; m += Math.ceil(months / 12)) {
+    ctx.fillText(m + 1 + '月', X(m) - 8, H - 8);
+  }
+  // 曲线
+  SCEN.forEach((s, k) => {
+    ctx.strokeStyle = SERIES_COLORS[k]; ctx.lineWidth = 2; ctx.beginPath();
+    s.stats.forEach((st, i) => i ? ctx.lineTo(X(i), Y(pick(st))) : ctx.moveTo(X(i), Y(pick(st))));
+    ctx.stroke();
+  });
+  // 图例
+  SCEN.forEach((s, k) => {
+    const x = pad.l + k * 118, y = H - 2;
+    ctx.fillStyle = SERIES_COLORS[k]; ctx.fillRect(x, y - 18, 10, 3);
+    ctx.fillStyle = '#d8e0ea'; ctx.fillText(s.name, x + 14, y - 12);
+  });
+}
+
+// ---------- 碎片整理动画 ----------
+let PLAN = null, animIdx = -1, timer = null;
+async function loadDefrag() {
+  if (PLAN) return;
+  PLAN = await api('/api/defrag/plan');
+  $('#efBefore').textContent = PLAN.plan.beforeEF.toFixed(4);
+  $('#efAfter').textContent = PLAN.plan.afterEF.toFixed(4);
+  $('#moveCount').textContent = PLAN.plan.moves.length;
+  $('#moveTime').textContent = PLAN.plan.totalDuration.toFixed(0) + ' s';
+  const tb = $('#moveTable tbody');
+  PLAN.plan.moves.forEach(m => {
+    tb.innerHTML += `<tr><td>${m.seq}</td><td>${m.connId}</td><td>#${m.segId}</td>
+      <td>${m.linkIds.map(x => 'L' + x).join(',')}</td><td>${m.from}</td><td>${m.to}</td>
+      <td>${m.slots}</td><td>${m.durationS.toFixed(1)}</td></tr>`;
+  });
+  showAnimFrame(-1);
+}
+function showAnimFrame(i) {
+  animIdx = i;
+  const data = i < 0 ? PLAN.before : PLAN.snapshots[i].spectrum;
+  drawSpectrum('#animSpectrum', data);
+  $('#animStep').textContent = i < 0 ? '初始状态' :
+    `第 ${i + 1}/${PLAN.snapshots.length} 步：连接 ${PLAN.snapshots[i].move.connId} slot ${PLAN.snapshots[i].move.from}→${PLAN.snapshots[i].move.to}`;
+}
+$('#btnNext').onclick = () => { if (PLAN && animIdx < PLAN.snapshots.length - 1) showAnimFrame(animIdx + 1); };
+$('#btnPrev').onclick = () => { if (PLAN && animIdx >= -1) showAnimFrame(animIdx - 1); };
+$('#btnPlay').onclick = () => {
+  if (timer) { clearInterval(timer); timer = null; return; }
+  if (animIdx >= PLAN.snapshots.length - 1) showAnimFrame(-1);
+  timer = setInterval(() => {
+    if (animIdx >= PLAN.snapshots.length - 1) { clearInterval(timer); timer = null; return; }
+    showAnimFrame(animIdx + 1);
+  }, 2100 - Number($('#speed').value));
+};
+
+// ---------- 瓶颈诊断 ----------
+async function loadBottleneck() {
+  const r = await api('/api/bottleneck');
+  const tb = $('#bnTable tbody'); tb.innerHTML = '';
+  r.candidates.forEach((c, i) => {
+    const l = TOPO.links.find(x => x.id === c.linkId);
+    tb.innerHTML += `<tr><td>${i + 1}</td><td>L${c.linkId} (N${l.u}-N${l.v}, ${l.lengthKm}km)</td>
+      <td>${c.hitCount}</td><td>${c.meanEF.toFixed(3)}</td><td><b>${c.unblocked}</b></td>
+      <td>${c.benefitScore.toFixed(1)}</td></tr>`;
+  });
+}
+
+loadNetwork();
+</script>
+</body>
+</html>
